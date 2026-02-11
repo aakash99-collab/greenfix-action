@@ -1,22 +1,56 @@
 import { EnvironmentalData, Report, ReportLocation } from "./types";
 
+// Realistic environmental data generation based on lat/lng region characteristics
 export function generateMockEnvironmentalData(location: ReportLocation): EnvironmentalData {
-  // Deterministic-ish mock based on lat/lng
-  const seed = Math.abs(location.lat * 1000 + location.lng * 100) % 100;
+  const lat = location.lat;
+  const lng = location.lng;
+
+  // Derive a deterministic seed from coordinates
+  const seed = Math.abs(Math.sin(lat * 12.9898 + lng * 78.233) * 43758.5453) % 1;
+
+  // Tropical / subtropical regions (closer to equator) → hotter, more humid
+  const isTropical = Math.abs(lat) < 25;
+  const isUrbanIndia = lat > 8 && lat < 35 && lng > 68 && lng < 97;
+
+  // Base temperature from latitude (rough model)
+  const baseTemp = isTropical
+    ? 30 + Math.round(seed * 8)       // 30–38°C
+    : 15 + Math.round(seed * 15);     // 15–30°C
+
+  // AQI — Indian cities tend higher
+  const baseAqi = isUrbanIndia
+    ? 120 + Math.round(seed * 180)    // 120–300
+    : 30 + Math.round(seed * 120);    // 30–150
+
+  const aqiCategory =
+    baseAqi <= 50 ? "Good" :
+    baseAqi <= 100 ? "Satisfactory" :
+    baseAqi <= 200 ? "Moderate" :
+    baseAqi <= 300 ? "Poor" :
+    baseAqi <= 400 ? "Very Poor" : "Severe";
+
+  const humidity = isTropical
+    ? 60 + Math.round(seed * 30)      // 60–90%
+    : 30 + Math.round(seed * 40);     // 30–70%
+
+  const feelsLike = baseTemp + Math.round((humidity / 100) * 6); // heat index approximation
+
   return {
-    aqi: 80 + Math.round(seed * 1.5),
-    aqiCategory: seed > 60 ? "Unhealthy" : seed > 30 ? "Moderate" : "Good",
-    pm25: 35 + Math.round(seed * 0.8),
-    pm10: 60 + Math.round(seed * 1.2),
-    co2: 400 + Math.round(seed * 3),
-    no2: 20 + Math.round(seed * 0.5),
-    temperature: 28 + Math.round(seed * 0.1),
-    feelsLike: 32 + Math.round(seed * 0.15),
-    humidity: 55 + Math.round(seed * 0.3),
-    windSpeed: 5 + Math.round(seed * 0.1),
-    heatIslandEffect: 2 + Math.round(seed * 0.05),
-    urbanHeatIndex: 35 + Math.round(seed * 0.1),
-    greenCoverEstimate: Math.max(5, 30 - Math.round(seed * 0.25)),
+    aqi: baseAqi,
+    aqiCategory,
+    pm25: Math.round(baseAqi * (0.3 + seed * 0.3)),
+    pm10: Math.round(baseAqi * (0.5 + seed * 0.4)),
+    co2: 410 + Math.round(seed * 190),           // 410–600 ppm
+    no2: 10 + Math.round(baseAqi * 0.15 * seed), // correlated with AQI
+    temperature: baseTemp,
+    feelsLike,
+    humidity,
+    windSpeed: 3 + Math.round(seed * 22),         // 3–25 km/h
+    heatIslandEffect: isUrbanIndia ? 2 + Math.round(seed * 5) : 1 + Math.round(seed * 3),
+    urbanHeatIndex: feelsLike + Math.round(seed * 4),
+    greenCoverEstimate: isUrbanIndia
+      ? Math.max(3, 25 - Math.round(seed * 20))   // 3–25% for Indian urban
+      : Math.max(10, 40 - Math.round(seed * 25)), // 10–40% elsewhere
   };
 }
 
