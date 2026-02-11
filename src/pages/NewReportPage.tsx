@@ -1,7 +1,9 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Check } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Check, PartyPopper } from "lucide-react";
 import StepImageUpload from "@/components/report/StepImageUpload";
 import StepAIAnalysis from "@/components/report/StepAIAnalysis";
 import StepEnvironmentalData from "@/components/report/StepEnvironmentalData";
@@ -12,12 +14,18 @@ import { ReportLocation, ReportProblem, EnvironmentalData, Solution } from "@/li
 const STEP_LABELS = ["Upload Images", "AI Analysis", "Environment", "Solutions", "Review & Submit"];
 
 export default function NewReportPage() {
+  const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(0);
   const [images, setImages] = useState<string[]>([]);
   const [location, setLocation] = useState<ReportLocation | null>(null);
   const [problems, setProblems] = useState<ReportProblem[]>([]);
   const [envData, setEnvData] = useState<EnvironmentalData | null>(null);
   const [solutions, setSolutions] = useState<Solution[]>([]);
+  const [showSuccess, setShowSuccess] = useState(false);
+
+  const handleSubmit = () => {
+    setShowSuccess(true);
+  };
 
   const canNext = () => {
     if (currentStep === 0) return images.length >= 1;
@@ -86,9 +94,40 @@ export default function NewReportPage() {
             Continue
           </Button>
         ) : (
-          <Button className="gap-2">Submit Report</Button>
+          <Button className="gap-2" onClick={handleSubmit}>Submit Report</Button>
         )}
       </div>
+
+      {/* Success Dialog */}
+      <Dialog open={showSuccess} onOpenChange={setShowSuccess}>
+        <DialogContent className="sm:max-w-md text-center">
+          <DialogHeader className="items-center">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+              <PartyPopper className="h-8 w-8 text-primary" />
+            </div>
+            <DialogTitle className="text-2xl font-display">Report Submitted!</DialogTitle>
+            <DialogDescription className="text-base pt-2 space-y-3">
+              <p>
+                Thank you for taking the initiative to make our city a better place to live. Your report has been received and will be reviewed by the concerned municipal authorities.
+              </p>
+              <p className="text-primary font-medium">
+                🌿 "Every citizen's voice matters in the fight against climate change. Together, we build greener, healthier cities."
+              </p>
+              <p className="text-xs text-muted-foreground">
+                — Department of Urban Development &amp; Environment
+              </p>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="sm:justify-center gap-2 pt-2">
+            <Button variant="outline" onClick={() => navigate("/dashboard")}>
+              View My Reports
+            </Button>
+            <Button onClick={() => navigate("/")}>
+              Back to Home
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
