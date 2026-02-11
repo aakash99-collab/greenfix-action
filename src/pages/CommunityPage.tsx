@@ -1,11 +1,9 @@
-/* react-leaflet v4 for React 18 compatibility */
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { MOCK_REPORTS } from "@/lib/mock-data";
 import { PROBLEM_LABELS, type Severity } from "@/lib/types";
 import { MapPin, Filter } from "lucide-react";
-import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -50,6 +48,48 @@ export default function CommunityPage() {
     reports.reduce((a, r) => a + r.location.lng, 0) / reports.length,
   ];
 
+  const mapRef = useRef<HTMLDivElement>(null);
+  const mapInstanceRef = useRef<L.Map | null>(null);
+
+  useEffect(() => {
+    if (!mapRef.current || mapInstanceRef.current) return;
+
+    const map = L.map(mapRef.current).setView(center, 13);
+    mapInstanceRef.current = map;
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    }).addTo(map);
+
+    reports.forEach((report) => {
+      const worst = getWorstSeverity(report.problems);
+      const marker = L.marker([report.location.lat, report.location.lng], {
+        icon: createColorIcon(SEVERITY_COLORS[worst]),
+      }).addTo(map);
+
+      const dateStr = new Date(report.createdAt).toLocaleDateString("en-IN", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      });
+      const labels = report.problems
+        .map(
+          (p) =>
+            `<span style="display:inline-block;background:#f1f5f9;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:500;margin:2px 2px 0 0;">${PROBLEM_LABELS[p.type]}</span>`
+        )
+        .join("");
+
+      marker.bindPopup(
+        `<div style="min-width:180px"><p style="font-weight:600;font-size:13px;margin:0">${report.location.address}</p><p style="font-size:11px;color:#6b7280;margin:2px 0 6px">${dateStr}</p><div>${labels}</div></div>`
+      );
+    });
+
+    return () => {
+      map.remove();
+      mapInstanceRef.current = null;
+    };
+  }, []);
+
   return (
     <div className="container py-8 md:py-12">
       <div className="mb-8">
@@ -80,40 +120,10 @@ export default function CommunityPage() {
       {/* Interactive Leaflet Map */}
       <Card className="mb-6 overflow-hidden">
         <CardContent className="h-72 p-0 md:h-96">
-          <MapContainer center={center} zoom={13} scrollWheelZoom style={{ height: "100%", width: "100%" }}>
-            <TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            />
-            {reports.map((report) => {
-              const worst = getWorstSeverity(report.problems);
-              return (
-                <Marker
-                  key={report.id}
-                  position={[report.location.lat, report.location.lng]}
-                  icon={createColorIcon(SEVERITY_COLORS[worst])}
-                >
-                  <Popup>
-                    <div className="min-w-[180px]">
-                      <p className="font-semibold text-sm">{report.location.address}</p>
-                      <p className="text-xs text-muted-foreground mb-2">
-                        {new Date(report.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
-                      </p>
-                      <div className="flex flex-wrap gap-1">
-                        {report.problems.map((p) => (
-                          <span key={p.type} className="inline-block rounded bg-secondary px-1.5 py-0.5 text-[10px] font-medium">
-                            {PROBLEM_LABELS[p.type]}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  </Popup>
-                </Marker>
-              );
-            })}
-          </MapContainer>
+          <div ref={mapRef} style={{ height: "100%", width: "100%" }} />
         </CardContent>
       </Card>
+
       {/* Report list */}
       <div className="flex items-center gap-2 mb-4">
         <Filter className="h-4 w-4 text-muted-foreground" />
