@@ -20,8 +20,9 @@ function aqiColor(aqi: number) {
 
 export default function StepEnvironmentalData({ location, envData, setEnvData }: Props) {
   useEffect(() => {
-    if (location && !envData) {
-      setEnvData(generateMockEnvironmentalData(location));
+    if (!envData) {
+      const loc = location ?? { lat: 22.5726, lng: 88.3639, address: "Salt Lake, Kolkata" };
+      setEnvData(generateMockEnvironmentalData(loc));
     }
   }, [location, envData, setEnvData]);
 
