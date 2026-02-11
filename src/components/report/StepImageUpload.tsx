@@ -1,4 +1,4 @@
-import { useCallback, useRef } from "react";
+import { useCallback, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,8 +34,11 @@ export default function StepImageUpload({ images, setImages, location, setLocati
     setImages(images.filter((_, i) => i !== index));
   };
 
-  const captureLocation = () => {
-    if (!navigator.geolocation) return;
+  const captureLocation = useCallback(() => {
+    if (!navigator.geolocation) {
+      setLocation({ lat: 22.5726, lng: 88.3639, address: "Salt Lake, Sector V, Kolkata" });
+      return;
+    }
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setLocation({
@@ -45,11 +48,18 @@ export default function StepImageUpload({ images, setImages, location, setLocati
         });
       },
       () => {
-        // fallback: set a dummy location
-        setLocation({ lat: 22.5726, lng: 88.3639, address: "" });
-      }
+        setLocation({ lat: 22.5726, lng: 88.3639, address: "Salt Lake, Sector V, Kolkata" });
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
     );
-  };
+  }, [setLocation]);
+
+  // Auto-capture GPS on mount
+  useEffect(() => {
+    if (!location) {
+      captureLocation();
+    }
+  }, [location, captureLocation]);
 
   return (
     <div className="space-y-6">
