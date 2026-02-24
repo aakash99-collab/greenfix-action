@@ -40,11 +40,27 @@ export default function StepAIAnalysis({ images, problems, setProblems }: Props)
   const [analysisResult, setAnalysisResult] = useState<AIAnalysisResult | null>(null);
   const { toast } = useToast();
 
+  const toBase64 = (url: string): Promise<string> =>
+    fetch(url)
+      .then((r) => r.blob())
+      .then(
+        (blob) =>
+          new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          })
+      );
+
   const runAnalysis = async () => {
     setAnalyzing(true);
     try {
+      // Convert blob URLs to base64 data URIs so the AI model can read them
+      const base64Images = await Promise.all(images.map(toBase64));
+
       const { data, error } = await supabase.functions.invoke("analyze-image", {
-        body: { images },
+        body: { images: base64Images },
       });
 
       if (error) throw error;
