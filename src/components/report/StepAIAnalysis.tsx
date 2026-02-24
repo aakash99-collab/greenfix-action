@@ -2,7 +2,23 @@ import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PROBLEM_LABELS, ProblemType, ReportProblem, Severity } from "@/lib/types";
-import { Cpu, Loader2, Plus, X } from "lucide-react";
+import { Cpu, Loader2, Plus, X, AlertTriangle, CheckCircle } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+
+interface AIAnalysisResult {
+  detected_issues: {
+    issue: string;
+    problem_type: string;
+    severity: string;
+    environmental_impact_type: string;
+    climate_impact_score: number;
+  }[];
+  overall_climate_impact_score: number;
+  suggested_action_plan: string[];
+  municipal_intervention_required: string;
+  summary: string;
+}
 
 interface Props {
   images: string[];
@@ -12,22 +28,51 @@ interface Props {
 
 const ALL_PROBLEMS = Object.keys(PROBLEM_LABELS) as ProblemType[];
 
+const SEVERITY_MAP: Record<string, Severity> = {
+  Low: "low",
+  Medium: "medium",
+  High: "high",
+};
+
 export default function StepAIAnalysis({ images, problems, setProblems }: Props) {
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzed, setAnalyzed] = useState(false);
+  const [analysisResult, setAnalysisResult] = useState<AIAnalysisResult | null>(null);
+  const { toast } = useToast();
 
   const runAnalysis = async () => {
     setAnalyzing(true);
-    // Simulate AI analysis with a delay
-    await new Promise((r) => setTimeout(r, 2000));
-    const mockDetected: ReportProblem[] = [
-      { type: "traffic_congestion", severity: "high", aiDetected: true },
-      { type: "lack_of_green", severity: "medium", aiDetected: true },
-      { type: "high_pollution", severity: "high", aiDetected: true },
-    ];
-    setProblems(mockDetected);
-    setAnalyzing(false);
-    setAnalyzed(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("analyze-image", {
+        body: { images },
+      });
+
+      if (error) throw error;
+
+      const result = data as AIAnalysisResult;
+      setAnalysisResult(result);
+
+      // Map AI detected issues to ReportProblems
+      const detected: ReportProblem[] = result.detected_issues
+        .filter((issue) => ALL_PROBLEMS.includes(issue.problem_type as ProblemType))
+        .map((issue) => ({
+          type: issue.problem_type as ProblemType,
+          severity: SEVERITY_MAP[issue.severity] || "medium",
+          aiDetected: true,
+        }));
+
+      setProblems(detected);
+      setAnalyzed(true);
+    } catch (err: any) {
+      console.error("Analysis failed:", err);
+      toast({
+        title: "Analysis failed",
+        description: err?.message || "Could not analyze images. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setAnalyzing(false);
+    }
   };
 
   const toggleProblem = (type: ProblemType) => {
@@ -64,6 +109,43 @@ export default function StepAIAnalysis({ images, problems, setProblems }: Props)
           {analyzing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Cpu className="h-4 w-4" />}
           {analyzing ? "Analyzing Images..." : "Run AI Analysis"}
         </Button>
+      )}
+
+      {/* AI Summary Card */}
+      {analysisResult && (
+        <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
+          <p className="text-sm font-medium">{analysisResult.summary}</p>
+          <div className="flex flex-wrap gap-4 text-sm">
+            <div className="flex items-center gap-1.5">
+              <span className="font-medium">Climate Impact:</span>
+              <Badge variant={analysisResult.overall_climate_impact_score >= 7 ? "destructive" : "secondary"}>
+                {analysisResult.overall_climate_impact_score}/10
+              </Badge>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="font-medium">Municipal Intervention:</span>
+              {analysisResult.municipal_intervention_required === "Yes" ? (
+                <Badge variant="destructive" className="gap-1">
+                  <AlertTriangle className="h-3 w-3" /> Required
+                </Badge>
+              ) : (
+                <Badge variant="secondary" className="gap-1">
+                  <CheckCircle className="h-3 w-3" /> Not Required
+                </Badge>
+              )}
+            </div>
+          </div>
+          {analysisResult.suggested_action_plan.length > 0 && (
+            <div>
+              <p className="text-xs font-medium text-muted-foreground mb-1">Action Plan:</p>
+              <ul className="text-xs text-muted-foreground space-y-0.5 list-disc list-inside">
+                {analysisResult.suggested_action_plan.map((action, i) => (
+                  <li key={i}>{action}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
       )}
 
       {problems.length > 0 && (
