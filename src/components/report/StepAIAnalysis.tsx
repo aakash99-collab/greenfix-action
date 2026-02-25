@@ -40,10 +40,17 @@ export default function StepAIAnalysis({ images, problems, setProblems }: Props)
   const [analysisResult, setAnalysisResult] = useState<AIAnalysisResult | null>(null);
   const { toast } = useToast();
 
+  const MAX_IMAGE_BYTES = 200_000;
+  const MAX_TOTAL_BYTES = 900_000;
+
+  const estimateDataUriBytes = (dataUri: string) => {
+    const [, base64 = ""] = dataUri.split(",");
+    return Math.ceil((base64.length * 3) / 4);
+  };
+
   const resizeAndBase64 = (url: string, maxDim = 1024, quality = 0.7): Promise<string> =>
     new Promise((resolve, reject) => {
       const img = new Image();
-      img.crossOrigin = "anonymous";
       img.onload = () => {
         let { width, height } = img;
         if (width > maxDim || height > maxDim) {
@@ -61,14 +68,56 @@ export default function StepAIAnalysis({ images, problems, setProblems }: Props)
       img.src = url;
     });
 
+  const compressForPayload = async (url: string) => {
+    let maxDim = 1024;
+    let quality = 0.7;
+    let optimized = await resizeAndBase64(url, maxDim, quality);
+
+    while (estimateDataUriBytes(optimized) > MAX_IMAGE_BYTES && (maxDim > 512 || quality > 0.45)) {
+      if (quality > 0.5) {
+        quality = Math.max(0.45, Number((quality - 0.1).toFixed(2)));
+      } else {
+        maxDim = Math.max(512, Math.round(maxDim * 0.85));
+        quality = Math.max(0.45, Number((quality - 0.05).toFixed(2)));
+      }
+
+      optimized = await resizeAndBase64(url, maxDim, quality);
+    }
+
+    return optimized;
+  };
+
+  const trimPayloadToLimit = (encodedImages: string[]) => {
+    let selected = [...encodedImages];
+    let totalBytes = selected.reduce((sum, img) => sum + estimateDataUriBytes(img), 0);
+
+    while (totalBytes > MAX_TOTAL_BYTES && selected.length > 1) {
+      selected = selected.slice(0, -1);
+      totalBytes = selected.reduce((sum, img) => sum + estimateDataUriBytes(img), 0);
+    }
+
+    return { selected, totalBytes };
+  };
+
   const runAnalysis = async () => {
     setAnalyzing(true);
     try {
-      // Convert blob URLs to base64 data URIs so the AI model can read them
-      const base64Images = await Promise.all(images.map((img) => resizeAndBase64(img)));
+      const optimizedImages = await Promise.all(images.map((img) => compressForPayload(img)));
+      const { selected: payloadImages, totalBytes } = trimPayloadToLimit(optimizedImages);
+
+      if (payloadImages.length === 0 || totalBytes > MAX_TOTAL_BYTES) {
+        throw new Error("Images are too large to analyze. Please upload smaller photos.");
+      }
+
+      if (payloadImages.length < images.length) {
+        toast({
+          title: "Images optimized",
+          description: `Using ${payloadImages.length} of ${images.length} images for reliable analysis.`,
+        });
+      }
 
       const { data, error } = await supabase.functions.invoke("analyze-image", {
-        body: { images: base64Images },
+        body: { images: payloadImages },
       });
 
       if (error) throw error;
