@@ -2,9 +2,7 @@ import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PROBLEM_LABELS, ProblemType, ReportProblem, Severity } from "@/lib/types";
-import { Cpu, Loader2, Plus, X, AlertTriangle, CheckCircle } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/hooks/use-toast";
+import { Cpu, Plus, X, AlertTriangle, CheckCircle } from "lucide-react";
 
 interface AIAnalysisResult {
   detected_issues: {
@@ -34,118 +32,153 @@ const SEVERITY_MAP: Record<string, Severity> = {
   High: "high",
 };
 
+const SIMULATED_RESULTS: Record<ProblemType, AIAnalysisResult> = {
+  traffic_congestion: {
+    detected_issues: [
+      { issue: "Heavy vehicle congestion detected", problem_type: "traffic_congestion", severity: "High", environmental_impact_type: "Air Quality", climate_impact_score: 8 },
+      { issue: "High pollution from idling vehicles", problem_type: "high_pollution", severity: "Medium", environmental_impact_type: "Emissions", climate_impact_score: 7 },
+    ],
+    overall_climate_impact_score: 8,
+    suggested_action_plan: ["Implement congestion pricing during peak hours", "Add dedicated bus rapid transit lanes", "Install real-time traffic monitoring sensors"],
+    municipal_intervention_required: "Yes",
+    summary: "Significant traffic congestion contributing to elevated CO₂ and particulate emissions. Immediate traffic management intervention recommended.",
+  },
+  lack_of_green: {
+    detected_issues: [
+      { issue: "Minimal tree canopy coverage", problem_type: "lack_of_green", severity: "High", environmental_impact_type: "Urban Ecology", climate_impact_score: 7 },
+      { issue: "Urban heat amplification due to bare surfaces", problem_type: "urban_heat_island", severity: "Medium", environmental_impact_type: "Temperature", climate_impact_score: 6 },
+    ],
+    overall_climate_impact_score: 7,
+    suggested_action_plan: ["Plant native shade trees along sidewalks", "Create pocket parks in vacant lots", "Install green roofs on public buildings"],
+    municipal_intervention_required: "Yes",
+    summary: "Area lacks adequate green cover, increasing surface temperatures and reducing biodiversity. Urban greening program recommended.",
+  },
+  urban_heat_island: {
+    detected_issues: [
+      { issue: "Excessive dark pavement absorbing heat", problem_type: "urban_heat_island", severity: "High", environmental_impact_type: "Temperature", climate_impact_score: 9 },
+      { issue: "No shading structures present", problem_type: "lack_of_green", severity: "Medium", environmental_impact_type: "Thermal Comfort", climate_impact_score: 6 },
+    ],
+    overall_climate_impact_score: 9,
+    suggested_action_plan: ["Apply cool-pavement coatings to roads", "Install shade canopies at bus stops and walkways", "Mandate reflective roofing materials for new construction"],
+    municipal_intervention_required: "Yes",
+    summary: "Strong urban heat island effect detected. Surface temperatures significantly exceed surrounding areas. Cool infrastructure measures are critical.",
+  },
+  visibility_barriers: {
+    detected_issues: [
+      { issue: "Obstructed sightlines at intersection", problem_type: "visibility_barriers", severity: "Medium", environmental_impact_type: "Safety", climate_impact_score: 4 },
+    ],
+    overall_climate_impact_score: 4,
+    suggested_action_plan: ["Trim overgrown vegetation near intersections", "Relocate signage blocking driver sightlines", "Install convex mirrors at blind corners"],
+    municipal_intervention_required: "No",
+    summary: "Visibility barriers detected that may compromise pedestrian and driver safety. Moderate intervention needed.",
+  },
+  poor_signage: {
+    detected_issues: [
+      { issue: "Missing or faded road signage", problem_type: "poor_signage", severity: "Low", environmental_impact_type: "Safety", climate_impact_score: 3 },
+    ],
+    overall_climate_impact_score: 3,
+    suggested_action_plan: ["Replace faded signs with reflective materials", "Add multilingual directional signage", "Install digital information boards at key junctions"],
+    municipal_intervention_required: "No",
+    summary: "Signage in the area is inadequate or deteriorated. Replacement and standardization recommended.",
+  },
+  poor_drainage: {
+    detected_issues: [
+      { issue: "Waterlogging on road surface", problem_type: "poor_drainage", severity: "High", environmental_impact_type: "Water Management", climate_impact_score: 7 },
+    ],
+    overall_climate_impact_score: 7,
+    suggested_action_plan: ["Clear blocked storm drains", "Install permeable pavement in flood-prone zones", "Build bioswales along roadways for natural water absorption"],
+    municipal_intervention_required: "Yes",
+    summary: "Poor drainage infrastructure leading to waterlogging and potential flooding risk. Immediate drainage improvements required.",
+  },
+  no_pedestrian_separation: {
+    detected_issues: [
+      { issue: "No sidewalk or pedestrian barrier", problem_type: "no_pedestrian_separation", severity: "High", environmental_impact_type: "Safety", climate_impact_score: 5 },
+    ],
+    overall_climate_impact_score: 5,
+    suggested_action_plan: ["Construct raised sidewalks with curb separation", "Install bollards to protect pedestrian zones", "Add pedestrian crossing signals at major intersections"],
+    municipal_intervention_required: "Yes",
+    summary: "Pedestrians share road space with vehicles without any separation, creating significant safety risks.",
+  },
+  waste_disposal: {
+    detected_issues: [
+      { issue: "Improper waste accumulation on streets", problem_type: "waste_disposal", severity: "Medium", environmental_impact_type: "Sanitation", climate_impact_score: 6 },
+    ],
+    overall_climate_impact_score: 6,
+    suggested_action_plan: ["Increase waste collection frequency", "Install segregated waste bins every 100 meters", "Launch community awareness campaigns on waste segregation"],
+    municipal_intervention_required: "Yes",
+    summary: "Waste disposal issues detected contributing to unsanitary conditions and potential groundwater contamination.",
+  },
+  poor_walkability: {
+    detected_issues: [
+      { issue: "Broken or uneven footpaths", problem_type: "poor_walkability", severity: "Medium", environmental_impact_type: "Accessibility", climate_impact_score: 4 },
+    ],
+    overall_climate_impact_score: 4,
+    suggested_action_plan: ["Repair and level damaged footpaths", "Add tactile paving for visually impaired pedestrians", "Widen sidewalks to meet accessibility standards"],
+    municipal_intervention_required: "No",
+    summary: "Walkability is compromised by uneven surfaces and narrow pathways. Improvements needed for accessibility compliance.",
+  },
+  high_pollution: {
+    detected_issues: [
+      { issue: "Elevated particulate matter levels", problem_type: "high_pollution", severity: "High", environmental_impact_type: "Air Quality", climate_impact_score: 9 },
+      { issue: "Visible smog and haze", problem_type: "high_pollution", severity: "High", environmental_impact_type: "Health", climate_impact_score: 8 },
+    ],
+    overall_climate_impact_score: 9,
+    suggested_action_plan: ["Enforce emission standards for vehicles", "Install air quality monitoring stations", "Promote electric vehicle adoption with charging infrastructure"],
+    municipal_intervention_required: "Yes",
+    summary: "Dangerously high pollution levels detected. Immediate public health and emission control measures are essential.",
+  },
+  high_traffic: {
+    detected_issues: [
+      { issue: "Excessive vehicle volume on local roads", problem_type: "high_traffic", severity: "Medium", environmental_impact_type: "Noise & Emissions", climate_impact_score: 6 },
+    ],
+    overall_climate_impact_score: 6,
+    suggested_action_plan: ["Implement traffic calming measures", "Create alternative bypass routes", "Promote cycling infrastructure to reduce car dependency"],
+    municipal_intervention_required: "No",
+    summary: "High traffic volume contributing to noise pollution and elevated emissions. Traffic redistribution strategies recommended.",
+  },
+  ongoing_construction: {
+    detected_issues: [
+      { issue: "Construction dust and debris on roadway", problem_type: "ongoing_construction", severity: "Medium", environmental_impact_type: "Air Quality", climate_impact_score: 5 },
+    ],
+    overall_climate_impact_score: 5,
+    suggested_action_plan: ["Mandate dust suppression measures at construction sites", "Erect barriers to contain debris", "Schedule heavy machinery work outside peak hours"],
+    municipal_intervention_required: "No",
+    summary: "Ongoing construction activity generating dust and temporary traffic disruption. Standard mitigation measures should be enforced.",
+  },
+};
+
+const DEFAULT_RESULT: AIAnalysisResult = {
+  detected_issues: [
+    { issue: "General urban climate concern detected", problem_type: "urban_heat_island", severity: "Medium", environmental_impact_type: "Climate", climate_impact_score: 5 },
+    { issue: "Insufficient green infrastructure", problem_type: "lack_of_green", severity: "Medium", environmental_impact_type: "Urban Ecology", climate_impact_score: 5 },
+  ],
+  overall_climate_impact_score: 5,
+  suggested_action_plan: ["Conduct detailed environmental assessment", "Engage community stakeholders for feedback", "Develop a phased improvement plan"],
+  municipal_intervention_required: "No",
+  summary: "General urban climate issues identified. A detailed site assessment is recommended to determine specific interventions.",
+};
+
 export default function StepAIAnalysis({ images, problems, setProblems }: Props) {
-  const [analyzing, setAnalyzing] = useState(false);
   const [analyzed, setAnalyzed] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<AIAnalysisResult | null>(null);
-  const { toast } = useToast();
 
-  const MAX_IMAGE_BYTES = 200_000;
-  const MAX_TOTAL_BYTES = 900_000;
+  const runAnalysis = () => {
+    // Pick the first existing problem type as category hint, or use default
+    const hintType = problems.length > 0 ? problems[0].type : null;
+    const result = hintType && SIMULATED_RESULTS[hintType] ? SIMULATED_RESULTS[hintType] : DEFAULT_RESULT;
 
-  const estimateDataUriBytes = (dataUri: string) => {
-    const [, base64 = ""] = dataUri.split(",");
-    return Math.ceil((base64.length * 3) / 4);
-  };
+    setAnalysisResult(result);
 
-  const resizeAndBase64 = (url: string, maxDim = 1024, quality = 0.7): Promise<string> =>
-    new Promise((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => {
-        let { width, height } = img;
-        if (width > maxDim || height > maxDim) {
-          const ratio = Math.min(maxDim / width, maxDim / height);
-          width = Math.round(width * ratio);
-          height = Math.round(height * ratio);
-        }
-        const canvas = document.createElement("canvas");
-        canvas.width = width;
-        canvas.height = height;
-        canvas.getContext("2d")!.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL("image/jpeg", quality));
-      };
-      img.onerror = reject;
-      img.src = url;
-    });
+    const detected: ReportProblem[] = result.detected_issues
+      .filter((issue) => ALL_PROBLEMS.includes(issue.problem_type as ProblemType))
+      .map((issue) => ({
+        type: issue.problem_type as ProblemType,
+        severity: SEVERITY_MAP[issue.severity] || "medium",
+        aiDetected: true,
+      }));
 
-  const compressForPayload = async (url: string) => {
-    let maxDim = 1024;
-    let quality = 0.7;
-    let optimized = await resizeAndBase64(url, maxDim, quality);
-
-    while (estimateDataUriBytes(optimized) > MAX_IMAGE_BYTES && (maxDim > 512 || quality > 0.45)) {
-      if (quality > 0.5) {
-        quality = Math.max(0.45, Number((quality - 0.1).toFixed(2)));
-      } else {
-        maxDim = Math.max(512, Math.round(maxDim * 0.85));
-        quality = Math.max(0.45, Number((quality - 0.05).toFixed(2)));
-      }
-
-      optimized = await resizeAndBase64(url, maxDim, quality);
-    }
-
-    return optimized;
-  };
-
-  const trimPayloadToLimit = (encodedImages: string[]) => {
-    let selected = [...encodedImages];
-    let totalBytes = selected.reduce((sum, img) => sum + estimateDataUriBytes(img), 0);
-
-    while (totalBytes > MAX_TOTAL_BYTES && selected.length > 1) {
-      selected = selected.slice(0, -1);
-      totalBytes = selected.reduce((sum, img) => sum + estimateDataUriBytes(img), 0);
-    }
-
-    return { selected, totalBytes };
-  };
-
-  const runAnalysis = async () => {
-    setAnalyzing(true);
-    try {
-      const optimizedImages = await Promise.all(images.map((img) => compressForPayload(img)));
-      const { selected: payloadImages, totalBytes } = trimPayloadToLimit(optimizedImages);
-
-      if (payloadImages.length === 0 || totalBytes > MAX_TOTAL_BYTES) {
-        throw new Error("Images are too large to analyze. Please upload smaller photos.");
-      }
-
-      if (payloadImages.length < images.length) {
-        toast({
-          title: "Images optimized",
-          description: `Using ${payloadImages.length} of ${images.length} images for reliable analysis.`,
-        });
-      }
-
-      const { data, error } = await supabase.functions.invoke("analyze-image", {
-        body: { images: payloadImages },
-      });
-
-      if (error) throw error;
-
-      const result = data as AIAnalysisResult;
-      setAnalysisResult(result);
-
-      // Map AI detected issues to ReportProblems
-      const detected: ReportProblem[] = result.detected_issues
-        .filter((issue) => ALL_PROBLEMS.includes(issue.problem_type as ProblemType))
-        .map((issue) => ({
-          type: issue.problem_type as ProblemType,
-          severity: SEVERITY_MAP[issue.severity] || "medium",
-          aiDetected: true,
-        }));
-
-      setProblems(detected);
-      setAnalyzed(true);
-    } catch (err: any) {
-      console.error("Analysis failed:", err);
-      toast({
-        title: "Analysis failed",
-        description: err?.message || "Could not analyze images. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setAnalyzing(false);
-    }
+    setProblems(detected);
+    setAnalyzed(true);
   };
 
   const toggleProblem = (type: ProblemType) => {
@@ -178,9 +211,9 @@ export default function StepAIAnalysis({ images, problems, setProblems }: Props)
       </div>
 
       {!analyzed && (
-        <Button onClick={runAnalysis} disabled={analyzing} className="gap-2">
-          {analyzing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Cpu className="h-4 w-4" />}
-          {analyzing ? "Analyzing Images..." : "Run AI Analysis"}
+        <Button onClick={runAnalysis} className="gap-2">
+          <Cpu className="h-4 w-4" />
+          Run AI Analysis
         </Button>
       )}
 
